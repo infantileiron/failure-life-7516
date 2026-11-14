@@ -11,6 +11,16 @@ class DatasetInput(InputModel):
  csv_text:str=Field(min_length=20,max_length=1000000)
 class RenameDataset(InputModel):
  name:str=Field(min_length=2,max_length=100)
+class SpecimenBatchInput(InputModel):
+ revision:int=Field(ge=1)
+ source:str=Field(default='',max_length=100)
+ note:str=Field(default='',max_length=500)
+ csv_text:str=Field(min_length=10,max_length=1000000)
+class WithdrawalBatchInput(InputModel):
+ revision:int=Field(ge=1)
+ source:str=Field(default='',max_length=100)
+ note:str=Field(default='',max_length=500)
+ specimen_ids:list[str]=Field(min_length=1,max_length=5000)
 class RuleInput(InputModel):
  name:str=Field(min_length=2,max_length=100)
  cutoff_hours:float|None=Field(default=240,gt=0,le=10000000)
@@ -23,6 +33,7 @@ class SurvivalStudyInput(InputModel):
  group_b:str=Field(default='B',min_length=1,max_length=30)
 class RunInput(InputModel):
  study_id:str
+ dataset_version:str=Field(default='',max_length=60)
 class ReviewInput(InputModel):
  run_id:str
  comment:str=Field(min_length=5,max_length=2000)

@@ -15,7 +15,7 @@ def download(id):
  report=repo.get('reports',id);run=repo.get('runs',report['run_id']);r=run['result']
  if repo.get('reviews',report['review_id'])['status']!='approved':raise HTTPException(403,'复核未通过')
  out=io.StringIO();w=csv.writer(out);lr=r['logrank']
- w.writerow(['report','included','excluded_other_groups','administratively_censored','chi_square_df1','p_value','logrank_estimable','checksum']);w.writerow([safe_cell(report['title']),r['included'],r['excluded_other_groups'],r['administratively_censored'],lr['chi_square'],lr['p_value'],lr['estimable'],r['checksum']])
+ w.writerow(['report','included','excluded_other_groups','administratively_censored','chi_square_df1','p_value','logrank_estimable','checksum','dataset_version','dataset_version_id','dataset_revision']);w.writerow([safe_cell(report['title']),r['included'],r['excluded_other_groups'],r['administratively_censored'],lr['chi_square'],lr['p_value'],lr['estimable'],r['checksum'],r.get('dataset',{}).get('version',run.get('dataset_version')),r.get('dataset',{}).get('id',run.get('dataset_version_id')),r.get('dataset',{}).get('revision',run.get('dataset_revision'))])
  w.writerow([]);w.writerow(['group','time_hours','at_risk','events','censored','risk_after','survival','greenwood_variance','ci95_low','ci95_high','median_hours'])
  for g in r['groups']:
   for p in g['curve']:w.writerow([safe_cell(g['group']),p['time'],p['at_risk'],p['events'],p['censored'],p['risk_after'],p['survival'],p['variance'],p['ci95_low'],p['ci95_high'],g['median_hours']])

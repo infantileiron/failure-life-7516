@@ -1,1 +1,10 @@
-import {request} from './client';import type {Dataset} from '../types/entities';export const list=()=>request<Dataset[]>('/datasets');export const create=(data:unknown)=>request<Dataset>('/datasets','POST',data);
+import {request} from './client';import type {Dataset,DatasetBatch,DatasetVersion,VersionedDataset} from '../types/entities';
+export const list=()=>request<Dataset[]>('/datasets');
+export const create=(data:unknown)=>request<Dataset>('/datasets','POST',data);
+export const detail=(id:string)=>request<VersionedDataset>('/datasets/'+id);
+export const versions=(id:string)=>request<DatasetVersion[]>('/datasets/'+id+'/versions');
+export const batches=(id:string)=>request<DatasetBatch[]>('/datasets/'+id+'/batches');
+export const appendSpecimens=(id:string,data:{revision:number;source?:string;note?:string;csv_text:string})=>request<BatchResult>('/datasets/'+id+'/specimens','POST',data);
+export const withdraw=(id:string,data:{revision:number;source?:string;note?:string;specimen_ids:string[]})=>request<BatchResult>('/datasets/'+id+'/withdrawals','POST',data);
+export type BatchResult={status:'applied'|'replayed';replay:boolean;revision:number;resulting_version:number;dataset_version_id:string;counts:{written:number;ignored:number;withdrawn:number};original_counts:{written:number;ignored:number;withdrawn:number};details:BatchDetail[];replay_count:number};
+export type BatchDetail={specimen_id:string;action:'written'|'ignored'|'withdrawn';revision:number;reason:string};

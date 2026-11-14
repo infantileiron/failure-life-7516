@@ -6,3 +6,5 @@ JWT_SECRET = os.getenv("JWT_SECRET", "failure-life-development-secret-change-thi
 SEED_DEMO = os.getenv("SEED_DEMO", "true").lower() == "true"
 TASK_MODE = os.getenv("TASK_MODE", "redis")
 ARTIFACT_DIR = Path(os.getenv("ARTIFACT_DIR", "/tmp/failure-life-artifacts"))
+# 并发补传带连续修订号时，最多等待前序修订落库的秒数。
+BATCH_REVISION_WAIT_SECONDS = float(os.getenv("BATCH_REVISION_WAIT_SECONDS", "10"))

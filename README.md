@@ -6,7 +6,7 @@
 
 上游 `material_life_202611.csv` 包含360件模拟试件的观察时间和失效状态。团队原来用均值寿命表，把未失效试件的截止时间当失效寿命、同刻风险集容易错算、两组删失差异缺少说明。本工程替代试件校验、删失口径锁定、统计计算与复核归档，下游工艺组据此安排后续试验讨论，不用于工程可靠性认证。
 
-六实体：SpecimenDataset试件数据、CensoringRule删失口径、SurvivalStudy生存研究、SurvivalRun计算运行、LifeReview寿命复核、Report报告。六页：寿命手册、试件观测、删失口径、生存研究、曲线与风险集、寿命复核。总览/结果复用SurvivalChart与LifeSummary。
+六实体：SpecimenDataset试件数据、CensoringRule删失口径、SurvivalStudy生存研究、SurvivalRun计算运行、LifeReview寿命复核、Report报告；每次增量补传/撤回再派生不可变资料版本与批次记录。六页：寿命手册、试件观测、删失口径、生存研究、曲线与风险集、寿命复核。总览/结果复用SurvivalChart与LifeSummary。
 
 ## 快速启动
 
@@ -36,12 +36,31 @@ docker compose exec -T backend python -m scripts.seed_demo
 6. 09:25 看两条阶梯生存曲线、逐点区间与删失刻线，查看未达到中位寿命的组。
 7. 09:30 逐时核对事件前风险集、观察/期望事件与方差；同刻删失在事件风险集中。
 8. 09:40 提交复核，材料复核人批准后生成报告，观察员下载完整证据CSV。
+9. 10:10 试验站分批补传迟到试件与更正记录：在已有资料上按递增修订号合并，页面显示每批写入、忽略、撤回明细与数量。
+10. 10:20 撤回设备故障试件，保留旧版本；重放同版同内容被忽略，同版异内容整批拒绝。新运行锁定最新资料版本，旧运行结果继续可查。
 
 ## 输入与删失规则
 
 CSV必需列specimen_id,group,duration_hours,event，可选censored。event只能0或1；若提供censored须等于1−event。时间为正有限小时且≤10,000,000，最多5000试件/8组。空字段、短行、重复ID、非有限时间、矛盾状态拒绝。两组必须不同且存在。
 
 所有试件从t=0进入，只支持右删失，不支持左截断、区间删失、竞争风险。行政截止为空则保留原始观察；duration>cutoff的记录转为cutoff时刻删失，duration=cutoff的原始事件仍计入，修改数量单列披露。原始数据不覆盖，口径及输入哈希与每次结果固定保存。
+
+## 增量补传、撤回与资料版本
+
+整表导入（`POST /datasets`）仍新建独立资料，不合并到已有资料。已有资料通过两个批次接口增量演进，二者都要求显式递增修订号（`revision`，从 1 开始连续递增）：
+
+- `POST /datasets/{id}/specimens`：按 `specimen_id` 合并试件。不存在则写入（new），内容不同则写入新值（corrected），内容完全相同则忽略（unchanged）。批次内重复编号、非法行使整批不生效。
+- `POST /datasets/{id}/withdrawals`：按试件编号撤回。撤回产生墓碑（tombstone）并保留完整版本历史；撤回编号不存在则整批不生效。
+
+语义要点：
+
+- 每次生效批次生成不可变资料版本（`version_count` 递增，`revision` 记录来源批次）。旧版本快照原样保留，可继续读取和分析。
+- 同版同内容重放（相同 `revision` + 相同内容指纹）直接忽略：不新增版本、不重复累计写入计数，仅累计 `replay_count`。重试幂等。
+- 同版异内容整批不生效，返回 409：同一修订号只允许一种内容。
+- 撤回后重发旧内容（撤回前已出现过的内容）被忽略，不使试件复活；只有实质性新内容（新的修订号与不同内容）才会重新纳入。
+- 并发补传按修订号串行化：较早修订未落库时后序修订等待重试，最终结果等同逐批串行，失败重试不会重复累计。
+- 运行创建时在事务内锁定资料版本（`dataset_version_id` / `dataset_version` / `dataset_revision` / `dataset_checksum`）；排队中的补传不影响本次计算。运行可显式指定旧版本（`POST /runs` 的 `dataset_version`）继续分析。
+- `GET /datasets/{id}/versions` 与 `GET /datasets/{id}/batches` 提供版本表与每批写入/忽略/撤回明细；`GET /datasets/{id}` 同时返回二者。
 
 ## KM与Greenwood
 
@@ -55,7 +74,7 @@ Greenwood方差为S²Σ[d/(n(n−d))]。S在(0,1)时给逐点log-log 95%区间�
 
 无事件或总方差0时χ²和p返回null，并说明不可估计，不硬填p=1。独立非信息删失是关键假设；小样本渐近近似有限，曲线交叉或非比例风险可能抵消差异，不能用p大证明两组相同。未估计风险比，不把p值替代材料决策或认证。
 
-结果含两组完整逐时KM、风险集、失效/删失、Greenwood方差和区间、中位、log-rank逐时贡献、口径、排除数及SHA256。报告必须引用该运行已批准复核，CSV包含完整记录，文本公式前缀保护。
+结果含两组完整逐时KM、风险集、失效/删失、Greenwood方差和区间、中位、log-rank逐时贡献、口径、排除数、资料版本快照及SHA256。报告必须引用该运行已批准复核，CSV包含完整记录、资料版本列，文本公式前缀保护。
 
 ## 技术与结构
 
@@ -66,7 +85,7 @@ Greenwood方差为S²Σ[d/(n(n−d))]。S在(0,1)时给逐点log-log 95%区间�
 | 算法 | Python math标准库，KM/Greenwood/log-rank |
 | 存储与异步 | PostgreSQL16 / Redis7.4 / 独立worker |
 
-77职责源文件。后端src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}，前端src/{api,stores,types,components/common,hooks,pages,router,utils,constants}。业务表TEXT主键+JSON文本载荷；DDL在backend/migrations/001_initial.sql，事务级advisory lock保护首次并发建表。
+75职责源文件（新增批次/版本服务与明细组件）。后端src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}，前端src/{api,stores,types,components/common,hooks,pages,router,utils,constants}。业务表TEXT主键+JSON文本载荷；新增不可变`dataset_versions`与幂等`dataset_batches`两张表，DDL在backend/migrations/001_initial.sql，事务级advisory lock保护首次并发建表；批次读改写使用同一事务锁串行化（SQLite `BEGIN IMMEDIATE`，PostgreSQL `pg_advisory_xact_lock`）。启动时`src/services/compat.py`为历史资料补齐第 1 版快照与历史运行的版本指针。
 
 共享枚举：后端src/constants/enums.py角色/运行/复核，src/constants/domain.py事件与配额；前端src/constants/enums.ts。模型/schema/前端类型分别在models/entities.py、schemas/entities.py、frontend/src/types/entities.ts。
 
@@ -76,7 +95,7 @@ Seed固定2301生成360件、A/B两组，失效时间和独立观察截止随机
 
 ## 已知边界
 
-数据全部模拟，删失机制的非信息性需要试验组判断，应用不自动证明。未实现风险比/精确小样本检验/左截断/竞争风险。Redis出队后worker强杀无自动重投，需要重新提交；JSON载荷无多人编辑乐观锁和迁移回滚。默认账号仅本地演示。
+数据全部模拟，删失机制的非信息性需要试验组判断，应用不自动证明。未实现风险比/精确小样本检验/左截断/竞争风险。Redis出队后worker强杀无自动重投，需要重新提交（重新提交同版同内容批次不会重复累计）；JSON载荷无多人编辑乐观锁，修订号冲突由服务端串行事务裁定。默认账号仅本地演示。
 
 真实容器、HTTP、手算oracle、浏览器主流程及截图在批次test-artifacts/gb-2301，源码不含测试截图/日志/报告。
 

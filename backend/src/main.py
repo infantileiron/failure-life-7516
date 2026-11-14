@@ -9,6 +9,10 @@ from src.routes import auth,dataset,study,run,review,report,audit,rule
 @asynccontextmanager
 async def lifespan(app):
     repo.init_db()
+    try:
+        from src.services.compat import upgrade_all
+        upgrade_all()
+    except Exception: logging.exception("legacy data upgrade failed; API remains available")
     if SEED_DEMO:
         try:
             from src.services.seed import seed
